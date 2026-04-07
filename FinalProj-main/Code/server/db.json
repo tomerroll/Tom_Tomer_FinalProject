@@ -1,0 +1,67 @@
+{
+    "patients": [
+        {
+            "firstName": "Shimon",
+            "id": "1",
+            "lastName": "Rubin"
+        },
+        {
+            "firstName": "Lior",
+            "id": "2",
+            "lastName": "Guzovsky"
+        },
+        {
+            "firstName": "Moran",
+            "id": "111",
+            "lastName": "Guzovsky"
+        },
+        {
+            "firstName": "Yossi",
+            "id": "444",
+            "lastName": "Levi"
+        }
+    ],
+    "patientsButtons": [
+        {
+            "enabled": "yes",
+            "id": "1"
+        },
+        {
+            "enabled": "yes",
+            "id": "2"
+        },
+        {
+            "enabled": "yes",
+            "id": "3"
+        }
+    ],
+    "patientsInTreatment": [
+        {
+            "firstName": "Shimon",
+            "lastName": "Rubin",
+            "patient": "1"
+        },
+        {
+            "firstName": "Lior",
+            "lastName": "Guzovsky",
+            "patient": "2"
+        },
+        {
+            "firstName": "Moran",
+            "lastName": "Guzovsky",
+            "patient": "3"
+        }
+    ],
+    "users": [
+        {
+            "loggedIn": "0",
+            "password": "123",
+            "username": "shi"
+        },
+        {
+            "loggedIn": "0",
+            "password": "456",
+            "username": "lio"
+        }
+    ]
+}
