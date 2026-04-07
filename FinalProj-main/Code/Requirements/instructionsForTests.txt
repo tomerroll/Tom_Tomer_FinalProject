@@ -1,0 +1,10 @@
+* INSTRUCTIONS TO MAKE THE TESTS ABLE FOR RUNNING *
+
+First, in the terminal - "pip install mock", then:
+
+1. Go to File
+2. Go to Settings
+3. Go to Project
+4. Go to Project Structure
+5. Mark client, server, and test folders as Sources
+6. You are ready to go and running the tests!
