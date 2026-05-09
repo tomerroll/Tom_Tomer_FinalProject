@@ -18,6 +18,8 @@ from bin_plotter import BINPlotter
 from videoProcessor import VideoProcessor
 from extractHeartRate import ExtractHeartRate
 
+WEBCAM_SESSION_SECONDS = 60
+
 
 class SpecificPatientScreen(QWidget):
     def __init__(self, app, client, patient, main_window=None):
@@ -217,12 +219,21 @@ class SpecificPatientScreen(QWidget):
         self.fps_history = deque(maxlen=90)
         self.source_is_webcam = False
 
+        # Webcam 60-second session state
+        self.webcam_session_active = False
+        self.webcam_elapsed = 0
+
     def setup_timers(self):
         self.hr_update_timer = QTimer(self)
         self.hr_update_timer.timeout.connect(self.update_heart_rate)
 
         self.video_timer = QTimer(self)
         self.video_timer.timeout.connect(self.update_video_feed)
+
+        # Fires every second during a webcam session to drive the countdown
+        self.webcam_session_timer = QTimer(self)
+        self.webcam_session_timer.setInterval(1000)
+        self.webcam_session_timer.timeout.connect(self._webcam_tick)
 
     def reset_runtime_state(self):
         self.list_rgb_means.clear()
@@ -236,6 +247,10 @@ class SpecificPatientScreen(QWidget):
         self.last_wall_time = None
         self.last_video_pos_msec = None
         self.fps_history.clear()
+
+        self.webcam_session_active = False
+        self.webcam_elapsed = 0
+        self.webcam_session_timer.stop()
 
         self.hr_extractor = ExtractHeartRate(
             min_signal_seconds=self.min_hr_window_seconds,
@@ -293,6 +308,52 @@ class SpecificPatientScreen(QWidget):
                 self.sampling_rate = (1.0 - alpha) * self.sampling_rate + alpha * smooth_fps
         else:
             self.sampling_rate = self.nominal_capture_fps
+
+    # ------------------------------------------------------------------ #
+    #  Webcam 60-second session helpers                                    #
+    # ------------------------------------------------------------------ #
+
+    def _webcam_tick(self):
+        """Called every second while a webcam session is running."""
+        self.webcam_elapsed += 1
+        remaining = WEBCAM_SESSION_SECONDS - self.webcam_elapsed
+        self.timer_label.setText(
+            f'⏱ Recording: {self.webcam_elapsed}s / {WEBCAM_SESSION_SECONDS}s  |  '
+            f'⏳ {remaining}s left  |  FPS: {self.sampling_rate:.1f}'
+        )
+        if self.webcam_elapsed >= WEBCAM_SESSION_SECONDS:
+            self._finish_webcam_session()
+
+    def _finish_webcam_session(self):
+        """Stop everything after 60 s and display the median heart rate."""
+        self.webcam_session_timer.stop()
+        self.webcam_session_active = False
+
+        self.video_timer.stop()
+        self.hr_update_timer.stop()
+        self.video_ended = True
+
+        # Release camera
+        if self.capture:
+            self.capture.release()
+            self.capture = None
+        self.video_processor = None
+        self.video_window.setText("✅ Session Complete")
+
+        # Calculate and display median HR
+        if self.hr_history:
+            median_hr = round(float(np.median(self.hr_history)), 1)
+            self.avg_hr_label.setText(f"📊 Median HR (60s): {median_hr} BPM")
+            self.hr_label.setText(f"❤ HR: {median_hr} BPM")
+            self.face_detect_error_label.setText('')
+        else:
+            self.avg_hr_label.setText("📊 Median HR: N/A (no face detected)")
+
+        self.timer_label.setText(f'✅ Done — {WEBCAM_SESSION_SECONDS}s session complete')
+        self.stop_button.setEnabled(False)
+        self.start_button.setEnabled(True)
+
+    # ------------------------------------------------------------------ #
 
     def display_video_feed(self, file_path=None):
         if self.capture:
@@ -364,8 +425,12 @@ class SpecificPatientScreen(QWidget):
             self._trim_rgb_buffer()
             self.frames_processed += 1
 
-            elapsed_seconds = len(self.list_rgb_means) / max(self.sampling_rate, 1.0)
-            self.timer_label.setText(f'⏱ Time: {int(elapsed_seconds)}s | FPS: {self.sampling_rate:.1f}')
+            # Let the webcam session ticker own the timer label during a session
+            if not self.webcam_session_active:
+                elapsed_seconds = len(self.list_rgb_means) / max(self.sampling_rate, 1.0)
+                self.timer_label.setText(
+                    f'⏱ Time: {int(elapsed_seconds)}s | FPS: {self.sampling_rate:.1f}'
+                )
 
             if not self.picture_captured:
                 self.capture_picture()
@@ -430,7 +495,21 @@ class SpecificPatientScreen(QWidget):
 
         self.hr_update_timer.start(1000)
 
+        # Webcam mode: start the 60-second countdown session
+        if self.video_combo_box.currentIndex() == 1:
+            self.webcam_session_active = True
+            self.webcam_elapsed = 0
+            self.timer_label.setText(
+                f'⏱ Recording: 0s / {WEBCAM_SESSION_SECONDS}s  |  '
+                f'⏳ {WEBCAM_SESSION_SECONDS}s left'
+            )
+            self.webcam_session_timer.start()
+
     def stop_clicked(self):
+        # Cancel any running webcam session
+        self.webcam_session_timer.stop()
+        self.webcam_session_active = False
+
         self.handle_video_end()
 
         if self.capture:
@@ -479,6 +558,8 @@ class SpecificPatientScreen(QWidget):
     def combo_box_changed(self, idx):
         self.video_timer.stop()
         self.hr_update_timer.stop()
+        self.webcam_session_timer.stop()
+        self.webcam_session_active = False
 
         if self.capture:
             self.capture.release()
