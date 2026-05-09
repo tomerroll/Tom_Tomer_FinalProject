@@ -166,12 +166,11 @@ class PanelScreen(QWidget):
 
     # Triggered when enter button pressed
     def enter_clicked(self, patient):
-        # Send a request to the server to leave the panel screen
         self.client.send('LEAVE_PANEL_SCREEN'.encode("utf-8"))
-        # Disable Enter button of the specified patient
         self.update_button_state_in_db(patient, "no")
-        # Navigate to Specific Patient screen
-        self.window_specificPatient_screen = SpecificPatientScreen(self.app, self.client, patient)
+        self.timer_of_updating_hr_labels.stop()       # stop timers before hiding
+        self.timer_of_updating_pics_patients.stop()   # stop timers before hiding
+        self.window_specificPatient_screen = SpecificPatientScreen(self.app, self.client, patient, main_window=self)
         self.window_specificPatient_screen.show()
         self.hide()
 
