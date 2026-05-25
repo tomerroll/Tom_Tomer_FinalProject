@@ -23,15 +23,15 @@
     ],
     "patientsButtons": [
         {
-            "enabled": "no",
+            "enabled": "yes",
             "id": "1"
         },
         {
-            "enabled": "no",
+            "enabled": "yes",
             "id": "2"
         },
         {
-            "enabled": "no",
+            "enabled": "yes",
             "id": "3"
         }
     ],
@@ -42,8 +42,8 @@
             "patient": "1"
         },
         {
-            "firstName": "Lior",
-            "lastName": "Guzovsky",
+            "firstName": "Shimon",
+            "lastName": "Rubin",
             "patient": "2"
         },
         {
@@ -54,14 +54,24 @@
     ],
     "users": [
         {
-            "loggedIn": "1",
+            "loggedIn": "0",
             "password": "123",
             "username": "shi"
         },
         {
-            "loggedIn": "1",
+            "loggedIn": "0",
             "password": "456",
             "username": "lio"
+        },
+        {
+            "loggedIn": "0",
+            "password": "789",
+            "username": "mor"
+        },
+        {
+            "loggedIn": "0",
+            "password": "123",
+            "username": "tom"
         }
     ]
 }

@@ -4,7 +4,6 @@ from collections import deque
 
 class ExtractHeartRate:
     def __init__(self, face_detected=None, min_signal_seconds=10.0, pos_window_seconds=2.5):
-        """Explicitly including pos_window_seconds to match the UI call"""
         self.face_detected = face_detected
         self.heart_rate = 0.0
         self.frequency = 0.0
@@ -18,20 +17,23 @@ class ExtractHeartRate:
         self.signal_quality = 0.0
 
     def calc_hr_process(self, roi_sample_list, sampling_rate, bin_plotter):
-        """Your UI expects this method to process the accumulated ROI samples[cite: 1, 4]"""
+        """Processes the accumulated window tracking lists."""
         if len(roi_sample_list) < (self.min_signal_seconds * sampling_rate):
-            return 0.0, 0.0, f"Collecting: {len(roi_sample_list)} frames"
+            # Return matching 3-tuple structure so unpacking does not throw an error
+            return 0.0, 0.0, f"Collecting data... ({len(roi_sample_list)} frames)"
 
-        # Combine RGB data from samples
+        # Combine RGB data safely
         rgb_data = []
         for frame_rois in roi_sample_list:
-            if frame_rois:
-                rgb_data.append(frame_rois[0]['rgb'])
+            if frame_rois and isinstance(frame_rois, list) and len(frame_rois) > 0:
+                if 'rgb' in frame_rois[0]:
+                    rgb_data.append(frame_rois[0]['rgb'])
         
-        if not rgb_data: return 0.0, 0.0, "No Signal"
+        if not rgb_data or len(rgb_data) < 10: 
+            return 0.0, 0.0, "No Valid Signal Structure Data"
         
-        # POS Algorithm logic[cite: 4]
-        rgb_arr = np.array(rgb_data)
+        # Plane-Orthogonal-to-Skin (POS) Core Execution
+        rgb_arr = np.array(rgb_data, dtype=np.float64)
         mean_rgb = np.mean(rgb_arr, axis=0)
         norm_rgb = rgb_arr / (mean_rgb + 1e-6)
         
@@ -43,18 +45,34 @@ class ExtractHeartRate:
         return self.estimate_hr_from_signal(bvp, sampling_rate, bin_plotter)
 
     def estimate_hr_from_signal(self, sig, fs, bin_plotter):
+        # Handle tiny sequences edge cases gracefully 
+        if len(sig) < 4:
+            return 0.0, 0.0, "Signal too short"
+            
         # Bandpass filter 0.7 - 2.5 Hz (42-150 BPM)
         nyq = 0.5 * fs
-        b, a = butter(4, [0.7/nyq, 2.5/nyq], btype='band')
-        clean_sig = filtfilt(b, a, sig)
+        low_cut = 0.7 / nyq
+        high_cut = 2.5 / nyq
         
-        # FFT
-        n_fft = 2048
-        f_abs = np.abs(np.fft.rfft(clean_sig * np.blackman(len(clean_sig)), n=n_fft))
+        # Ensure clipping filter parameters stay safely inside Nyquist boundaries
+        low_cut = max(0.001, min(low_cut, 0.999))
+        high_cut = max(0.002, min(high_cut, 0.999))
+        
+        try:
+            b, a = butter(4, [low_cut, high_cut], btype='band')
+            clean_sig = filtfilt(b, a, sig)
+        except Exception:
+            clean_sig = detrend(sig) # Fallback to avoid complete breakdown
+
+        # Power Spectral Density extraction using FFT
+        n_fft = max(2048, len(clean_sig))
+        window = np.blackman(len(clean_sig))
+        f_abs = np.abs(np.fft.rfft(clean_sig * window, n=n_fft))
         freqs = np.fft.rfftfreq(n_fft, d=1.0/fs)
         
         valid_idx = np.where((freqs >= 0.75) & (freqs <= 2.5))[0]
-        if len(valid_idx) == 0: return 0.0, 0.0, "Range Error"
+        if len(valid_idx) == 0: 
+            return 0.0, 0.0, "Range Error"
         
         best_freq = freqs[valid_idx[np.argmax(f_abs[valid_idx])]]
         self.hr_buffer.append(best_freq * 60.0)
@@ -62,8 +80,11 @@ class ExtractHeartRate:
         self.heart_rate = np.median(self.hr_buffer)
         self.frequency = self.heart_rate / 60.0
         
-        # Update the UI chart if provided
+        # Safely trigger real-time chart update if defined
         if bin_plotter:
-            bin_plotter.update_bin_plot(f_abs[valid_idx])
+            try:
+                bin_plotter.update_bin_plot(f_abs[valid_idx])
+            except Exception:
+                pass
             
         return self.heart_rate, self.frequency, None

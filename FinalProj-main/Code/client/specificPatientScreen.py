@@ -309,12 +309,7 @@ class SpecificPatientScreen(QWidget):
         else:
             self.sampling_rate = self.nominal_capture_fps
 
-    # ------------------------------------------------------------------ #
-    #  Webcam 60-second session helpers                                    #
-    # ------------------------------------------------------------------ #
-
     def _webcam_tick(self):
-        """Called every second while a webcam session is running."""
         self.webcam_elapsed += 1
         remaining = WEBCAM_SESSION_SECONDS - self.webcam_elapsed
         self.timer_label.setText(
@@ -325,7 +320,6 @@ class SpecificPatientScreen(QWidget):
             self._finish_webcam_session()
 
     def _finish_webcam_session(self):
-        """Stop everything after 60 s and display the median heart rate."""
         self.webcam_session_timer.stop()
         self.webcam_session_active = False
 
@@ -333,14 +327,12 @@ class SpecificPatientScreen(QWidget):
         self.hr_update_timer.stop()
         self.video_ended = True
 
-        # Release camera
         if self.capture:
             self.capture.release()
             self.capture = None
         self.video_processor = None
         self.video_window.setText("✅ Session Complete")
 
-        # Calculate and display median HR
         if self.hr_history:
             median_hr = round(float(np.median(self.hr_history)), 1)
             self.avg_hr_label.setText(f"📊 Median HR (60s): {median_hr} BPM")
@@ -352,8 +344,6 @@ class SpecificPatientScreen(QWidget):
         self.timer_label.setText(f'✅ Done — {WEBCAM_SESSION_SECONDS}s session complete')
         self.stop_button.setEnabled(False)
         self.start_button.setEnabled(True)
-
-    # ------------------------------------------------------------------ #
 
     def display_video_feed(self, file_path=None):
         if self.capture:
@@ -392,13 +382,14 @@ class SpecificPatientScreen(QWidget):
         self.video_timer.start(delay)
 
     def update_video_feed(self):
-        if not self.capture or not self.capture.isOpened():
+        if not self.capture or not self.capture.isOpened() or self.video_ended:
             return
 
+        # Explicitly check if the file reader hit the termination limits
         if self.video_combo_box.currentIndex() == 0:
             current_frame_idx = int(self.capture.get(cv2.CAP_PROP_POS_FRAMES))
             total_frames = int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT))
-            if total_frames > 0 and current_frame_idx >= total_frames - 5:
+            if total_frames > 0 and current_frame_idx >= total_frames - 2:
                 self.handle_video_end()
                 return
 
@@ -406,6 +397,11 @@ class SpecificPatientScreen(QWidget):
             return
 
         roi_results, current_frame, face_found = self.video_processor.update_video_feed()
+
+        # Handle explicit empty signals or EOF termination returns
+        if current_frame is None and self.video_combo_box.currentIndex() == 0:
+            self.handle_video_end()
+            return
 
         if current_frame is not None:
             self.last_frame = current_frame.copy()
@@ -425,9 +421,9 @@ class SpecificPatientScreen(QWidget):
             self._trim_rgb_buffer()
             self.frames_processed += 1
 
-            # Let the webcam session ticker own the timer label during a session
+            # CHANGED: Fix timer label stalling at 20s by evaluating total frames processed
             if not self.webcam_session_active:
-                elapsed_seconds = len(self.list_rgb_means) / max(self.sampling_rate, 1.0)
+                elapsed_seconds = self.frames_processed / max(self.sampling_rate, 1.0)
                 self.timer_label.setText(
                     f'⏱ Time: {int(elapsed_seconds)}s | FPS: {self.sampling_rate:.1f}'
                 )
@@ -449,10 +445,6 @@ class SpecificPatientScreen(QWidget):
             self.sampling_rate,
             self.bin_plotter
         )
-
-        if hr is None or freq is None:
-            self.face_detect_error_label.setText("⚠ No valid RGB data")
-            return
 
         if err:
             self.face_detect_error_label.setText(f"⚠ {err}")
@@ -479,9 +471,20 @@ class SpecificPatientScreen(QWidget):
         self.video_timer.stop()
         self.hr_update_timer.stop()
 
+        if self.capture:
+            self.capture.release()
+            self.capture = None
+        self.video_processor = None
+        self.video_window.setText("✅ Video Playback Complete")
+
         if self.hr_history:
             avg = round(sum(self.hr_history) / len(self.hr_history), 1)
+            median = round(float(np.median(self.hr_history)), 1)
             self.avg_hr_label.setText(f"📊 Final Avg HR: {avg} BPM")
+            self.hr_label.setText(f"❤ Final HR (Med): {median} BPM")
+            self.face_detect_error_label.setText('')
+        else:
+            self.avg_hr_label.setText("📊 Final Avg HR: N/A")
 
         self.stop_button.setEnabled(False)
         self.start_button.setEnabled(True)
@@ -493,9 +496,11 @@ class SpecificPatientScreen(QWidget):
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
 
+        if self.video_combo_box.currentIndex() == 0 and self.capture:
+            self.capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
         self.hr_update_timer.start(1000)
 
-        # Webcam mode: start the 60-second countdown session
         if self.video_combo_box.currentIndex() == 1:
             self.webcam_session_active = True
             self.webcam_elapsed = 0
@@ -506,50 +511,24 @@ class SpecificPatientScreen(QWidget):
             self.webcam_session_timer.start()
 
     def stop_clicked(self):
-        # Cancel any running webcam session
         self.webcam_session_timer.stop()
         self.webcam_session_active = False
-
         self.handle_video_end()
-
-        if self.capture:
-            self.capture.release()
-            self.capture = None
-
-        self.video_processor = None
-        self.video_window.clear()
-        self.video_window.setText("Video Stopped")
 
     def back_clicked(self):
         self.stop_clicked()
         self.hide()
-
         if self.main_window:
             self.main_window.show()
 
     def delete_patient_image(self):
-        pics_folder = os.path.join(
-            os.path.dirname(__file__),
-            '..',
-            'server',
-            'pics'
-        )
-        image_path = os.path.join(
-            pics_folder,
-            f"patient_{self.patient}_image.jpg"
-        )
-
+        pics_folder = os.path.join(os.path.dirname(__file__), '..', 'server', 'pics')
+        image_path = os.path.join(pics_folder, f"patient_{self.patient}_image.jpg")
         if os.path.exists(image_path):
             os.remove(image_path)
 
     def open_clicked(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open Video",
-            "",
-            "Videos (*.mp4 *.avi)"
-        )
-
+        path, _ = QFileDialog.getOpenFileName(self, "Open Video", "", "Videos (*.mp4 *.avi)")
         if path:
             self.display_video_feed(path)
             self.start_button.setEnabled(True)
@@ -591,21 +570,9 @@ class SpecificPatientScreen(QWidget):
 
     def capture_picture(self):
         if self.face_detected_latest and self.last_frame is not None:
-            pics_folder = os.path.join(
-                os.path.dirname(__file__),
-                '..',
-                'server',
-                'pics'
-            )
+            pics_folder = os.path.join(os.path.dirname(__file__), '..', 'server', 'pics')
             os.makedirs(pics_folder, exist_ok=True)
-
-            image_path = os.path.join(
-                pics_folder,
-                f"patient_{self.patient}_image.jpg"
-            )
-
-            image = Image.fromarray(
-                cv2.cvtColor(self.last_frame, cv2.COLOR_BGR2RGB)
-            )
+            image_path = os.path.join(pics_folder, f"patient_{self.patient}_image.jpg")
+            image = Image.fromarray(cv2.cvtColor(self.last_frame, cv2.COLOR_BGR2RGB))
             image.save(image_path, format="JPEG")
             self.picture_captured = True

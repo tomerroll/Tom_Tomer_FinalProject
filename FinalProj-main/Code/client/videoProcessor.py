@@ -28,11 +28,11 @@ class VideoProcessor:
                 min_detection_confidence=0.5
             )
         else:
-            # Fallback to your original Haar Cascade logic
+            # Fallback to Haar Cascade logic
             self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
     def _extract_face_rois_mp(self, frame, landmarks):
-        """Extracts ROI using MediaPipe Landmarks (Landmark 10 for forehead)[cite: 3]"""
+        """Extracts ROI using MediaPipe Landmarks (Landmark 10 for forehead)"""
         h, w, _ = frame.shape
         center = landmarks[10]
         cx, cy = int(center.x * w), int(center.y * h)
@@ -41,25 +41,36 @@ class VideoProcessor:
         fw = (landmarks[338].x - landmarks[109].x) * w
         roi_size = int(fw * 0.25)
         
+        if roi_size <= 0:
+            return None
+
         sx, sy = max(0, cx - roi_size//2), max(0, cy - roi_size//2)
-        roi_img = frame[sy:sy+roi_size, sx:sx+roi_size]
-        return [("forehead", roi_img, (sx, sy, roi_size, roi_size))]
+        ex, ey = min(w, sx + roi_size), min(h, sy + roi_size)
+        
+        roi_img = frame[sy:ey, sx:ex]
+        return [("forehead", roi_img, (sx, sy, ex - sx, ey - sy))]
 
     def _extract_face_rois_haar(self, frame):
-        """Original Haar Cascade fallback[cite: 2]"""
+        """Original Haar Cascade fallback"""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
-        if len(faces) == 0: return None
+        if len(faces) == 0: 
+            return None
         
         x, y, w, h = faces[0]
         # Forehead estimate
         fx, fy, fw, fh = x + int(w*0.3), y + int(h*0.1), int(w*0.4), int(h*0.15)
-        roi_img = frame[fy:fy+fh, fx:fx+fw]
-        return [("forehead", roi_img, (fx, fy, fw, fh))]
+        
+        h_img, w_img, _ = frame.shape
+        ex, ey = min(w_img, fx + fw), min(h_img, fy + fh)
+        
+        roi_img = frame[fy:ey, fx:ex]
+        return [("forehead", roi_img, (fx, fy, ex - fx, ey - fy))]
 
     def update_video_feed(self):
         ret, frame = self.capture.read()
-        if not ret or frame is None: return None, None, False
+        if not ret or frame is None: 
+            return None, None, False
 
         self.frame_counter += 1
         display_frame = frame.copy()
@@ -69,29 +80,46 @@ class VideoProcessor:
         if MEDIAPIPE_AVAILABLE:
             results = self.face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             if results.multi_face_landmarks:
-                face_found = True
                 rois = self._extract_face_rois_mp(frame, results.multi_face_landmarks[0].landmark)
-                for name, img, box in rois:
-                    cv2.rectangle(display_frame, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), (0, 255, 0), 2)
-                    roi_results = [self._extract_single_roi_rgb(name, img)]
+                if rois:
+                    face_found = True
+                    for name, img, box in rois:
+                        cv2.rectangle(display_frame, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), (0, 255, 0), 2)
+                        single_roi_data = self._extract_single_roi_rgb(name, img)
+                        if single_roi_data["rgb"] is not None:
+                            roi_results = [single_roi_data]
         else:
             rois = self._extract_face_rois_haar(frame)
             if rois:
                 face_found = True
                 for name, img, box in rois:
                     cv2.rectangle(display_frame, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), (0, 255, 0), 2)
-                    roi_results = [self._extract_single_roi_rgb(name, img)]
+                    single_roi_data = self._extract_single_roi_rgb(name, img)
+                    if single_roi_data["rgb"] is not None:
+                        roi_results = [single_roi_data]
 
-        # Rendering logic
+        # Rendering logic to update PyQt interface window layout
         rgb_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_frame.shape
         qimg = QImage(rgb_frame.data, w, h, ch * w, QImage.Format_RGB888)
+        
+        # Check window dimension boundaries before layout calculation to prevent stretch exceptions
+        win_w = max(self.video_window.width(), 100)
+        win_h = max(self.video_window.height(), 100)
+        
         self.video_window.setPixmap(QPixmap.fromImage(qimg).scaled(
-            self.video_window.width(), self.video_window.height(), Qt.KeepAspectRatio))
+            win_w, win_h, Qt.KeepAspectRatio))
 
         return roi_results, display_frame, face_found
 
     def _extract_single_roi_rgb(self, name, roi):
-        if roi is None or roi.size == 0: return {"name": name, "rgb": None, "quality": 0.0}
-        avg_rgb = np.mean(roi, axis=(0, 1))
-        return {"name": name, "rgb": (avg_rgb[2], avg_rgb[1], avg_rgb[0]), "quality": 100.0}
+        if roi is None or roi.size == 0 or roi.shape[0] == 0 or roi.shape[1] == 0: 
+            return {"name": name, "rgb": None, "quality": 0.0}
+        
+        avg_bgr = np.mean(roi, axis=(0, 1))
+        # Safely convert to float list to ensure downstream numpy arrays build correctly
+        return {
+            "name": name, 
+            "rgb": [float(avg_bgr[2]), float(avg_bgr[1]), float(avg_bgr[0])], 
+            "quality": 100.0
+        }
