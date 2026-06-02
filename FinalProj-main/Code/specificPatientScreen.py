@@ -157,10 +157,12 @@ class SpecificPatientScreen(QWidget):
         self.hr_label.setObjectName("highlight_label")
         self.freq_label = QLabel('Frequency: --')
         self.avg_hr_label = QLabel('Final Avg HR: --')
+        self.pixel_quality_label = QLabel('Sample Quality: --')
 
         stats_layout.addWidget(self.hr_label)
         stats_layout.addWidget(self.freq_label)
         stats_layout.addWidget(self.avg_hr_label)
+        stats_layout.addWidget(self.pixel_quality_label)
         right_top_panel.addLayout(stats_layout)
 
         self.hr_window = QWidget()
@@ -244,6 +246,7 @@ class SpecificPatientScreen(QWidget):
         self.hr_label.setText('Heart rate: --')
         self.freq_label.setText('Frequency: --')
         self.avg_hr_label.setText('Final Avg HR: --')
+        self.pixel_quality_label.setText('Sample Quality: --')
         self.face_detect_error_label.setText('')
         self.timer_label.setText('Time: 0s')
 
@@ -362,6 +365,25 @@ class SpecificPatientScreen(QWidget):
             self.list_rgb_means.append(roi_results)
             self._trim_rgb_buffer()
             self.frames_processed += 1
+            
+            roi = roi_results[0]
+
+            pixels = roi.get("pixels", 0)
+            score = roi.get("sampling_score", 0)
+
+
+            if pixels < 3000:
+                level = "Poor"
+            elif pixels < 4500:
+                level = "Fair"
+            elif pixels < 6000:
+                level = "Good"
+            else:
+                level = "Excellent"
+
+            self.pixel_quality_label.setText(
+                f"📷 ROI: {pixels} px | {level} ({score:.0f}/100)"
+            )
 
             elapsed_seconds = len(self.list_rgb_means) / max(self.sampling_rate, 1.0)
             self.timer_label.setText(f'⏱ Time: {int(elapsed_seconds)}s | FPS: {self.sampling_rate:.1f}')
@@ -376,21 +398,34 @@ class SpecificPatientScreen(QWidget):
         if len(self.list_rgb_means) < self._get_min_frames_for_hr():
             return
 
+        if self.hr_extractor is None:
+            self.face_detect_error_label.setText("⚠ HR extractor is not ready")
+            return
+
+        if not hasattr(self.hr_extractor, "calc_hr_process"):
+            self.face_detect_error_label.setText("⚠ calc_hr_process is missing in ExtractHeartRate")
+            return
+
         self.hr_extractor.face_detected = self.face_detected_latest
 
-        hr, freq, err = self.hr_extractor.calc_hr_process(
-            list(self.list_rgb_means),
-            self.sampling_rate,
-            self.bin_plotter
-        )
+        try:
+            hr, freq, err = self.hr_extractor.calc_hr_process(
+                list(self.list_rgb_means),
+                self.sampling_rate,
+                self.bin_plotter
+            )
+        except Exception as e:
+            self.face_detect_error_label.setText(f"⚠ HR calculation error: {e}")
+            print(f"[HR-ERROR] {e}")
+            return
 
         if hr is None or freq is None:
-            self.face_detect_error_label.setText("⚠ No valid RGB data")
+            self.face_detect_error_label.setText("⏳ Waiting for stable ROI signal")
             return
 
         if err:
             self.face_detect_error_label.setText(f"⚠ {err}")
-            if hr and 40 <= hr <= 180:
+            if 40 <= hr <= 180:
                 self.hr_label.setText(f"❤ HR: {round(hr, 1)} BPM")
                 self.freq_label.setText(f"🌊 Freq: {round(freq, 2)} Hz")
             return
@@ -398,7 +433,9 @@ class SpecificPatientScreen(QWidget):
         self.face_detect_error_label.setText('')
         self.hr_label.setText(f"❤ HR: {round(hr, 1)} BPM")
         self.freq_label.setText(f"🌊 Freq: {round(freq, 2)} Hz")
-        self.hr_plotter.update_hr_plot(hr)
+
+        if hasattr(self, "hr_plotter") and self.hr_plotter is not None:
+            self.hr_plotter.update_hr_plot(hr)
 
         if 40 <= hr <= 180:
             self.hr_history.append(hr)
@@ -421,12 +458,16 @@ class SpecificPatientScreen(QWidget):
 
     def start_clicked(self):
         self.video_ended = False
-        self.reset_runtime_state()
 
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
 
+        if self.capture is not None and self.capture.isOpened() and not self.video_timer.isActive():
+            delay = max(1, int(1000 / max(self.nominal_capture_fps, 1.0)))
+            self.video_timer.start(delay)
+
         self.hr_update_timer.start(1000)
+
 
     def stop_clicked(self):
         self.handle_video_end()
