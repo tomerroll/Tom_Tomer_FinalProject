@@ -95,15 +95,15 @@ class SpecificPatientScreen(QWidget):
 
         top_bar_layout = QHBoxLayout()
 
-        self.exit_button = QPushButton('⬅ Exit')
-        self.exit_button.setFixedSize(90, 35)
-        self.exit_button.clicked.connect(self.exit_clicked)
+        self.back_button = QPushButton('⬅ Back')
+        self.back_button.setFixedSize(90, 35)
+        self.back_button.clicked.connect(self.back_clicked)
 
-        title_label = QLabel(f"Live HR Monitoring")
+        title_label = QLabel(f"Live Vitals Monitoring - Patient {self.patient}")
         title_label.setFont(QFont("Arial", 18, QFont.Bold))
         title_label.setAlignment(Qt.AlignCenter)
 
-        top_bar_layout.addWidget(self.exit_button)
+        top_bar_layout.addWidget(self.back_button)
         top_bar_layout.addWidget(title_label, 1)
         main_layout.addLayout(top_bar_layout)
 
@@ -157,10 +157,12 @@ class SpecificPatientScreen(QWidget):
         self.hr_label.setObjectName("highlight_label")
         self.freq_label = QLabel('Frequency: --')
         self.avg_hr_label = QLabel('Final Avg HR: --')
+        self.pixel_quality_label = QLabel('Sample Quality: --')
 
         stats_layout.addWidget(self.hr_label)
         stats_layout.addWidget(self.freq_label)
         stats_layout.addWidget(self.avg_hr_label)
+        stats_layout.addWidget(self.pixel_quality_label)
         right_top_panel.addLayout(stats_layout)
 
         self.hr_window = QWidget()
@@ -244,6 +246,7 @@ class SpecificPatientScreen(QWidget):
         self.hr_label.setText('Heart rate: --')
         self.freq_label.setText('Frequency: --')
         self.avg_hr_label.setText('Final Avg HR: --')
+        self.pixel_quality_label.setText('Sample Quality: --')
         self.face_detect_error_label.setText('')
         self.timer_label.setText('Time: 0s')
 
@@ -369,11 +372,11 @@ class SpecificPatientScreen(QWidget):
             score = roi.get("sampling_score", 0)
 
 
-            if pixels < 3000:
+            if pixels < 1500:
                 level = "Poor"
-            elif pixels < 4500:
+            elif pixels < 3350:
                 level = "Fair"
-            elif pixels < 6000:
+            elif pixels < 5000:
                 level = "Good"
             else:
                 level = "Excellent"
@@ -437,6 +440,7 @@ class SpecificPatientScreen(QWidget):
         if 40 <= hr <= 180:
             self.hr_history.append(hr)
 
+
     def handle_video_end(self):
         if self.video_ended:
             return
@@ -446,8 +450,8 @@ class SpecificPatientScreen(QWidget):
         self.hr_update_timer.stop()
 
         if self.hr_history:
-            median = round(float(np.median(self.hr_history)), 1)
-            self.median_hr_label.setText(f"📊 Final HR: {median} BPM")
+            avg = round(sum(self.hr_history) / len(self.hr_history), 1)
+            self.avg_hr_label.setText(f"📊 Final Avg HR: {avg} BPM")
 
         self.stop_button.setEnabled(False)
         self.start_button.setEnabled(True)
@@ -476,22 +480,12 @@ class SpecificPatientScreen(QWidget):
         self.video_window.clear()
         self.video_window.setText("Video Stopped")
 
-    
-    def exit_clicked(self):
-        self.video_timer.stop()
-        self.hr_update_timer.stop()
-
-        if self.capture:
-            self.capture.release()
-            self.capture = None
-
-        self.video_processor = None
+    def back_clicked(self):
+        self.stop_clicked()
+        self.hide()
 
         if self.main_window:
             self.main_window.show()
-
-        self.close()
-
 
     def delete_patient_image(self):
         pics_folder = os.path.join(
@@ -544,6 +538,7 @@ class SpecificPatientScreen(QWidget):
             self.start_button.setEnabled(False)
 
         self.stop_button.setEnabled(False)
+
 
     def capture_picture(self):
         if self.face_detected_latest and self.last_frame is not None:
