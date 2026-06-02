@@ -446,16 +446,19 @@ class SpecificPatientScreen(QWidget):
             return
 
         self.video_ended = True
-        self.video_timer.stop()
-        self.hr_update_timer.stop()
+
+        if self.video_timer.isActive():
+            self.video_timer.stop()
+
+        if self.hr_update_timer.isActive():
+            self.hr_update_timer.stop()
 
         if self.hr_history:
-            avg = round(sum(self.hr_history) / len(self.hr_history), 1)
-            self.avg_hr_label.setText(f"📊 Final Avg HR: {avg} BPM")
+            median_hr = round(float(np.median(self.hr_history)), 1)
+            self.avg_hr_label.setText(f"📊 Final HR: {median_hr} BPM")
 
         self.stop_button.setEnabled(False)
         self.start_button.setEnabled(True)
-
     def start_clicked(self):
         self.video_ended = False
 
@@ -470,6 +473,12 @@ class SpecificPatientScreen(QWidget):
 
 
     def stop_clicked(self):
+        if self.video_timer.isActive():
+            self.video_timer.stop()
+
+        if self.hr_update_timer.isActive():
+            self.hr_update_timer.stop()
+
         self.handle_video_end()
 
         if self.capture:
@@ -481,11 +490,22 @@ class SpecificPatientScreen(QWidget):
         self.video_window.setText("Video Stopped")
 
     def back_clicked(self):
-        self.stop_clicked()
-        self.hide()
+        if self.video_timer.isActive():
+            self.video_timer.stop()
+
+        if self.hr_update_timer.isActive():
+            self.hr_update_timer.stop()
+
+        if self.capture:
+            self.capture.release()
+            self.capture = None
+
+        self.video_processor = None
 
         if self.main_window:
             self.main_window.show()
+
+        self.close()
 
     def delete_patient_image(self):
         pics_folder = os.path.join(
