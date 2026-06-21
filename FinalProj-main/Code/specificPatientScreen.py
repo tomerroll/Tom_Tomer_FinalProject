@@ -17,6 +17,9 @@ from bin_plotter import BINPlotter
 from videoProcessor import VideoProcessor
 from extractHeartRate import ExtractHeartRate
 
+# Import the HelpDialog from our new file
+from helpDialog import HelpDialog
+
 
 class SpecificPatientScreen(QWidget):
     def __init__(self, app, client, patient, main_window=None):
@@ -98,12 +101,18 @@ class SpecificPatientScreen(QWidget):
         self.back_button = QPushButton('⬅ Back')
         self.back_button.setFixedSize(90, 35)
         self.back_button.clicked.connect(self.back_clicked)
+        
+        # --- Adding the Help button ---
+        self.help_button = QPushButton('❓ Help')
+        self.help_button.setFixedSize(90, 35)
+        self.help_button.clicked.connect(self.show_help_dialog)
 
         title_label = QLabel(f"Live Vitals Monitoring - Patient {self.patient}")
         title_label.setFont(QFont("Arial", 18, QFont.Bold))
         title_label.setAlignment(Qt.AlignCenter)
 
         top_bar_layout.addWidget(self.back_button)
+        top_bar_layout.addWidget(self.help_button)  # Added to Layout next to Back
         top_bar_layout.addWidget(title_label, 1)
         main_layout.addLayout(top_bar_layout)
 
@@ -190,6 +199,11 @@ class SpecificPatientScreen(QWidget):
         btn.setEnabled(enabled)
         btn.clicked.connect(slot)
         return btn
+
+    # --- Function to trigger the external HelpDialog ---
+    def show_help_dialog(self):
+        dialog = HelpDialog(self)
+        dialog.exec_()
 
     def init_variables(self):
         self.min_hr_window_seconds = 10.0
@@ -371,13 +385,14 @@ class SpecificPatientScreen(QWidget):
             pixels = roi.get("pixels", 0)
             score = roi.get("sampling_score", 0)
 
-
-            if pixels < 1500:
-                level = "Poor"
-            elif pixels < 3350:
-                level = "Fair"
-            elif pixels < 5000:
+            if pixels < 2500:
+                level = "Very Bad"
+            elif pixels < 4500:
+                level = "Bad"
+            elif pixels < 6500:
                 level = "Good"
+            elif pixels < 8500:
+                level = "Very Good"
             else:
                 level = "Excellent"
 
@@ -459,6 +474,7 @@ class SpecificPatientScreen(QWidget):
 
         self.stop_button.setEnabled(False)
         self.start_button.setEnabled(True)
+
     def start_clicked(self):
         self.video_ended = False
 
@@ -470,7 +486,6 @@ class SpecificPatientScreen(QWidget):
             self.video_timer.start(delay)
 
         self.hr_update_timer.start(1000)
-
 
     def stop_clicked(self):
         if self.video_timer.isActive():
@@ -558,7 +573,6 @@ class SpecificPatientScreen(QWidget):
             self.start_button.setEnabled(False)
 
         self.stop_button.setEnabled(False)
-
 
     def capture_picture(self):
         if self.face_detected_latest and self.last_frame is not None:
