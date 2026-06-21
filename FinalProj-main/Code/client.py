@@ -5,6 +5,10 @@ from specificPatientScreen import SpecificPatientScreen
 DEFAULT_PATIENT_ID = 1
 
 def main():
+    """
+    Main application entry point. Initializes the underlying PyQt5 framework, 
+    instantiates the SpecificPatientScreen, and executes the event loop.
+    """
     app = QApplication(sys.argv)
 
     window = SpecificPatientScreen(

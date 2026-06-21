@@ -16,13 +16,17 @@ from hr_plotter import HRPlotter
 from bin_plotter import BINPlotter
 from videoProcessor import VideoProcessor
 from extractHeartRate import ExtractHeartRate
-
-# Import the HelpDialog from our new file
 from helpDialog import HelpDialog
 
-
 class SpecificPatientScreen(QWidget):
+    """
+    The main GUI widget for real-time video processing and heart rate monitoring.
+    Handles video acquisition, state management, and UI updates.
+    """
     def __init__(self, app, client, patient, main_window=None):
+        """
+        Initializes the specific patient monitoring screen.
+        """
         super().__init__()
         self.app = app
         self.client = client
@@ -40,6 +44,9 @@ class SpecificPatientScreen(QWidget):
         self.setup_timers()
 
     def apply_modern_style(self):
+        """
+        Applies a modern, dark-themed CSS stylesheet to the application's components.
+        """
         style = """
         QWidget {
             background-color: #1e1e2e;
@@ -92,6 +99,10 @@ class SpecificPatientScreen(QWidget):
         self.setStyleSheet(style)
 
     def setup_ui(self):
+        """
+        Constructs the graphical layout, positioning buttons, labels, and plotters 
+        within the main window grid.
+        """
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(20)
@@ -102,7 +113,6 @@ class SpecificPatientScreen(QWidget):
         self.back_button.setFixedSize(90, 35)
         self.back_button.clicked.connect(self.back_clicked)
         
-        # --- Adding the Help button ---
         self.help_button = QPushButton('❓ Help')
         self.help_button.setFixedSize(90, 35)
         self.help_button.clicked.connect(self.show_help_dialog)
@@ -112,7 +122,7 @@ class SpecificPatientScreen(QWidget):
         title_label.setAlignment(Qt.AlignCenter)
 
         top_bar_layout.addWidget(self.back_button)
-        top_bar_layout.addWidget(self.help_button)  # Added to Layout next to Back
+        top_bar_layout.addWidget(self.help_button) 
         top_bar_layout.addWidget(title_label, 1)
         main_layout.addLayout(top_bar_layout)
 
@@ -194,18 +204,26 @@ class SpecificPatientScreen(QWidget):
         main_layout.addLayout(grid_layout)
 
     def create_button(self, text, slot, enabled=True):
+        """
+        Helper method to create, style, and connect QPushButton widgets uniformly.
+        """
         btn = QPushButton(text, self)
         btn.setFixedSize(90, 35)
         btn.setEnabled(enabled)
         btn.clicked.connect(slot)
         return btn
 
-    # --- Function to trigger the external HelpDialog ---
     def show_help_dialog(self):
+        """
+        Instantiates and displays the HelpDialog interface.
+        """
         dialog = HelpDialog(self)
         dialog.exec_()
 
     def init_variables(self):
+        """
+        Initializes core tracking variables, objects, and buffers required for analysis.
+        """
         self.min_hr_window_seconds = 10.0
         self.max_hr_window_seconds = 20.0
         self.pos_window_seconds = 1.6
@@ -233,6 +251,9 @@ class SpecificPatientScreen(QWidget):
         self.source_is_webcam = False
 
     def setup_timers(self):
+        """
+        Configures the PyQt timers responsible for the application's tick rate.
+        """
         self.hr_update_timer = QTimer(self)
         self.hr_update_timer.timeout.connect(self.update_heart_rate)
 
@@ -240,6 +261,9 @@ class SpecificPatientScreen(QWidget):
         self.video_timer.timeout.connect(self.update_video_feed)
 
     def reset_runtime_state(self):
+        """
+        Clears all active data buffers and resets the tracking state for a new session.
+        """
         self.list_rgb_means.clear()
         self.hr_history = []
         self.frames_processed = 0
@@ -265,19 +289,32 @@ class SpecificPatientScreen(QWidget):
         self.timer_label.setText('Time: 0s')
 
     def _get_effective_buffer_size(self):
+        """
+        Calculates the maximum total frames the deque should hold based on the FPS.
+        """
         fps = max(float(self.sampling_rate), 1.0)
         return int(np.ceil(self.max_hr_window_seconds * fps))
 
     def _get_min_frames_for_hr(self):
+        """
+        Calculates the minimum frames required to trigger the first heart rate calculation.
+        """
         fps = max(float(self.sampling_rate), 1.0)
         return int(np.ceil(self.min_hr_window_seconds * fps))
 
     def _trim_rgb_buffer(self):
+        """
+        Pops older frames from the left of the deque to maintain the maximum buffer size.
+        """
         max_frames = max(self._get_effective_buffer_size(), 1)
         while len(self.list_rgb_means) > max_frames:
             self.list_rgb_means.popleft()
 
     def _update_sampling_rate(self):
+        """
+        Dynamically calculates the current frames-per-second to account for variable frame rate 
+        (VFR) drift in consumer webcams, stabilizing the frequency domain analysis.
+        """
         measured_fps = None
 
         if self.source_is_webcam:
@@ -305,12 +342,18 @@ class SpecificPatientScreen(QWidget):
             if self.sampling_rate <= 0:
                 self.sampling_rate = smooth_fps
             else:
+                # Exponential moving average filter to smooth minor FPS jitters
                 alpha = 0.15
                 self.sampling_rate = (1.0 - alpha) * self.sampling_rate + alpha * smooth_fps
         else:
             self.sampling_rate = self.nominal_capture_fps
 
     def display_video_feed(self, file_path=None):
+        """
+        Initializes the OpenCV VideoCapture object and binds it to the VideoProcessor.
+
+        :param file_path: Optional string path to a local video. If None, defaults to webcam (0).
+        """
         if self.capture:
             self.capture.release()
             self.capture = None
@@ -347,6 +390,10 @@ class SpecificPatientScreen(QWidget):
         self.video_timer.start(delay)
 
     def update_video_feed(self):
+        """
+        The main video tick loop. Reads a frame, processes the facial ROI, evaluates 
+        sample quality, and renders the image to the PyQt QLabel.
+        """
         if not self.capture or not self.capture.isOpened():
             return
 
@@ -385,6 +432,8 @@ class SpecificPatientScreen(QWidget):
             pixels = roi.get("pixels", 0)
             score = roi.get("sampling_score", 0)
 
+            # Categorize spatial resolution to enforce minimum required conditions 
+            # for reliable algorithm execution
             if pixels < 2500:
                 level = "Very Bad"
             elif pixels < 4500:
@@ -407,6 +456,10 @@ class SpecificPatientScreen(QWidget):
                 self.capture_picture()
 
     def update_heart_rate(self):
+        """
+        Triggered periodically to pass the accumulated RGB buffer to the extraction module. 
+        Updates UI plots and text labels with the calculated physiological data.
+        """
         if self.video_ended:
             return
 
@@ -457,6 +510,9 @@ class SpecificPatientScreen(QWidget):
 
 
     def handle_video_end(self):
+        """
+        Invoked when the video stream terminates. Halts timers and computes the final median HR.
+        """
         if self.video_ended:
             return
 
@@ -476,6 +532,9 @@ class SpecificPatientScreen(QWidget):
         self.start_button.setEnabled(True)
 
     def start_clicked(self):
+        """
+        Slot mapped to the Start button. Activates data flow and application timers.
+        """
         self.video_ended = False
 
         self.start_button.setEnabled(False)
@@ -488,6 +547,9 @@ class SpecificPatientScreen(QWidget):
         self.hr_update_timer.start(1000)
 
     def stop_clicked(self):
+        """
+        Slot mapped to the Stop button. Manually concludes the measurement session.
+        """
         if self.video_timer.isActive():
             self.video_timer.stop()
 
@@ -505,6 +567,9 @@ class SpecificPatientScreen(QWidget):
         self.video_window.setText("Video Stopped")
 
     def back_clicked(self):
+        """
+        Slot mapped to the Back button. Safely closes the current widget and returns to main.
+        """
         if self.video_timer.isActive():
             self.video_timer.stop()
 
@@ -523,6 +588,9 @@ class SpecificPatientScreen(QWidget):
         self.close()
 
     def delete_patient_image(self):
+        """
+        Deletes the locally cached patient profile image from the server directory.
+        """
         pics_folder = os.path.join(
             os.path.dirname(__file__),
             '..',
@@ -538,6 +606,9 @@ class SpecificPatientScreen(QWidget):
             os.remove(image_path)
 
     def open_clicked(self):
+        """
+        Slot mapped to the Open button. Summons a file explorer to load a local video.
+        """
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Open Video",
@@ -551,6 +622,11 @@ class SpecificPatientScreen(QWidget):
             self.stop_button.setEnabled(False)
 
     def combo_box_changed(self, idx):
+        """
+        Handles index changes in the source selection ComboBox, resetting the application state.
+        
+        :param idx: The newly selected index (0 = File, 1 = Webcam).
+        """
         self.video_timer.stop()
         self.hr_update_timer.stop()
 
@@ -575,6 +651,9 @@ class SpecificPatientScreen(QWidget):
         self.stop_button.setEnabled(False)
 
     def capture_picture(self):
+        """
+        Captures the first stable frame with a detected face and saves it as a JPEG profile image.
+        """
         if self.face_detected_latest and self.last_frame is not None:
             pics_folder = os.path.join(
                 os.path.dirname(__file__),

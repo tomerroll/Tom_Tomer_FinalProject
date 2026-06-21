@@ -13,7 +13,18 @@ except (ImportError, AttributeError):
 
 
 class VideoProcessor:
+    """
+    Handles frame-by-frame extraction of facial Regions of Interest (ROI) using 
+    either MediaPipe (dense landmark mapping) or OpenCV Haar Cascades (fallback).
+    """
     def __init__(self, capture, video_window, is_webcam=False):
+        """
+        Initializes the VideoProcessor and configures the vision backbone.
+
+        :param capture: The cv2.VideoCapture object.
+        :param video_window: The PyQt QLabel where the output frames will be rendered.
+        :param is_webcam: Boolean indicating if the source is live.
+        """
         self.capture = capture
         self.video_window = video_window
         self.is_webcam = is_webcam
@@ -32,6 +43,14 @@ class VideoProcessor:
             )
 
     def _extract_face_rois_mp(self, frame, landmarks):
+        """
+        Uses explicit MediaPipe facial landmarks to dynamically anchor and crop the 
+        forehead ROI, ensuring geometric invariance to scale and subtle translations.
+
+        :param frame: The full BGR video frame.
+        :param landmarks: A normalized list of MediaPipe landmark coordinates.
+        :return: A list of tuples containing (ROI name, cropped image array, bounding box).
+        """
         h, w, _ = frame.shape
 
         center = landmarks[10]
@@ -58,6 +77,14 @@ class VideoProcessor:
 
 
     def _extract_face_rois_haar(self, frame):
+        """
+        Fallback mechanism utilizing Haar Cascades to estimate the forehead location 
+        via static pixel offsets when MediaPipe is unavailable.
+
+        :param frame: The full BGR video frame.
+        :return: A list of tuples containing (ROI name, cropped image array, bounding box) 
+                 or None if no face is detected.
+        """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
 
@@ -76,6 +103,12 @@ class VideoProcessor:
         return [("forehead", roi_img, (fx, fy, fw, fh))]
 
     def update_video_feed(self):
+        """
+        Executes a single frame processing cycle: reads a frame, invokes the vision backend, 
+        draws bounding boxes, formats the image for UI rendering, and calculates RGB spatial averages.
+
+        :return: Tuple containing (list of dictionaries with ROI statistics, raw frame, face_found boolean).
+        """
         ret, frame = self.capture.read()
 
         if not ret or frame is None:
@@ -160,6 +193,13 @@ class VideoProcessor:
         return roi_results, display_frame, face_found
 
     def _extract_single_roi_rgb(self, name, roi):
+        """
+        Computes the spatial pixel average for Red, Green, and Blue channels over the isolated ROI.
+
+        :param name: The anatomical string identifier of the ROI (e.g., "forehead").
+        :param roi: The cropped numpy image array of the region.
+        :return: A dictionary mapping the statistical data (pixel count, sampling score, avg RGB tuple).
+        """
         if roi is None or roi.size == 0:
             print(f"[VIDEO] {name}: no valid ROI pixels")
 

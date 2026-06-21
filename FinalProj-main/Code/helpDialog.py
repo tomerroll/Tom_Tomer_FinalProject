@@ -1,10 +1,17 @@
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTextBrowser
 
 class HelpDialog(QDialog):
+    """
+    A dialog window providing the user with an instructional guide on how to 
+    operate the rPPG monitoring application and optimize capture conditions.
+    """
     def __init__(self, parent=None):
+        """
+        Initializes the HelpDialog interface, applies styling, and sets the HTML content.
+        """
         super().__init__(parent)
         self.setWindowTitle("User Guide")
-        self.resize(650, 700) # הגדלתי מעט את החלון כדי להכיל את הסעיף החדש
+        self.resize(650, 700) 
         
         # Modern dark theme styling matching the main app
         self.setStyleSheet("""
