@@ -1,45 +1,133 @@
-# Heart Rate Extraction Application
+# VitalSign Monitoring System
+
+A standalone desktop application for contactless heart-rate estimation using rPPG facial video analysis.
 
 ## Overview
-Welcome to Heart Rate Extraction Application, a client-server desktop application developed in Python for extracting heart rates from patients using recorded or live video. The application features a user-friendly UI to manage patient and user data, stored efficiently in JSON data files. The heart rate extraction process involves a sophisticated pipeline, outlined below.
 
-## Pipeline for Heart Rate Extraction
-**1. Receiving Video Input:**
-- Handling both recorded and live video streams at 30 Hz, 1920x1080 resolution.
+The system estimates heart rate from either a live webcam stream or a prerecorded video file.
 
-**2. Locating the Eyes Using Haar Cascade Classifier**
-- Employing Haar cascade classifier to precisely identify eyes in video frames.
+The application detects the user's face, extracts the forehead Region of Interest (ROI), analyzes RGB color changes, and displays the estimated heart rate in real time.
 
-**3. Locating the Region of Interest (ROI)**
-- Selecting the forehead as the ROI post eye detection, leveraging its suitability for pulse detection.
+No login or server connection is required.
 
-**4. Addressing the Green Color Channel**
-- Converting ROI to RGB, isolating the green channel, and applying median calculation for noise reduction.
+## Main Features
 
-**5. Performing FFT**
-- Applying Fast Fourier Transform on the green channel data to transition from time domain to frequency domain, enhancing signal clarity by adjusting sample size.
+- Live webcam heart-rate estimation
+- Video file analysis
+- Face detection
+- Forehead ROI extraction
+- Real-time BPM display
+- Frequency display
+- Final average heart-rate display
+- Heart-rate graph
+- FFT graph
+- Sample quality indicator
+- Help button with usage instructions
 
-**6. Calculating Absolute FFT Values**
-- Deriving absolute values from the FFT output to process frequency components effectively.
+## Technologies Used
 
-**7. Calculating Heart Rate Thresholds**
-- Determining low and high heart rate thresholds to identify potential heart rate frequencies based on FFT analysis.
+- Python
+- PyQt5
+- OpenCV
+- NumPy
+- SciPy
+- Matplotlib
+- Pillow
 
-**8. Searching for the Highest Value in Threshold Range**
-- Identifying the peak frequency within the calculated heart rate thresholds indicative of the actual heart rate.
+## Recommended Python Version
 
-**9. Calculating the Heart Rate Frequency**
-- Using the peak frequency to calculate the heart rate frequency with a refined formula.
+Use Python 3.11.
 
-**10. Calculating the Heart Rate**
-- Converting heart rate frequency to beats per minute (BPM) to determine the patient's heart rate.
-   
-## References
-Our development process and pipeline for extracting the pulse were influenced and guided by valuable insights from the following articles:
+Python 3.13 is not recommended for this project because some packages may fail during installation.
 
-1.	Bush, I. (2016). Measuring Heart Rate from Video. Stanford Computer Science.
-2.	Hill, B. L., Liu, X., McDuff, D. (2021). Beat-to-Beat Cardiac Pulse Rate Measurement From Video. University of California, Los Angeles.
-3.	Lee, Y. C., Syakura, A., Khalil, M. A., Wu, C. H., Ding, Y. F., Wang, C. W. (September 2020). A real-time camera-based adaptive breathing monitoring system.
-4.	Molinaro, N., Schena, E., Silvestri, S., Bonotti, F., Aguzzi, D., Viola, E., Buccolini, F., Massaroni, C. (February 2022). Contactless Vital Signs Monitoring From Videos Recorded With Digital Cameras: An Overview.
-5.	Viola, P., Jones, M. (2001). Rapid Object Detection using a Boosted Cascade of Simple Features. Mitsubishi Electric Research Labs, Compaq CRL.
-6.	Chen, X., Cheng, J., Song, R., Liu, Y., Ward, R., Wang, Z. J. (October 2019). Video-Based Heart Rate Measurement: Recent Advances and Future Prospects.
+## Setup Virtual Environment
+
+Open PowerShell inside the project folder:
+
+```powershell
+cd /path/to/Tom_Tomer_FinalProject/Code
+```
+
+Create a virtual environment using Python 3.11:
+
+```powershell
+py -3.11 -m venv venv
+```
+
+Activate the virtual environment:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+Check that the virtual environment uses Python 3.11:
+
+```powershell
+python --version
+```
+
+Install the required packages:
+
+```powershell
+pip install -r .\Requirements\requirements.txt
+```
+
+## Run the Project
+
+Make sure the virtual environment is activated, then run:
+
+```powershell
+python client.py
+```
+
+## How to Use
+
+### Video File
+
+1. Select `Video File`.
+2. Click `Open`.
+3. Choose an MP4 or AVI file.
+4. Click `Start`.
+5. Click `Stop` when finished.
+
+### Live Webcam
+
+1. Select `Live Webcam`.
+2. Wait for the webcam preview.
+3. Sit in front of the camera.
+4. Make sure your forehead is visible.
+5. Click `Start`.
+6. Click `Stop` when finished.
+
+## Help Button
+
+The application includes a `Help` button.
+
+The Help window explains how to use the system, understand the graphs, and improve sample quality.
+
+## Recommended Conditions
+
+For better accuracy:
+
+- Keep the forehead visible.
+- Sit still during the measurement.
+- Use stable indoor lighting.
+- Avoid strong shadows or reflections.
+- Keep the camera stable.
+- Avoid talking during the measurement.
+
+## Notes
+
+This project is intended for academic and research purposes only.
+
+It is not a medical device and should not be used for medical diagnosis.
+
+## Authors
+
+Tomer Roll  
+Tom Biton
+
+## Supervisors
+
+Dr. Dan Lemberg  
+Mrs. Elena Kramer
